@@ -1,9 +1,10 @@
-# Surfer
+# Surfer Browser
 
-Android uchun brauzer (WebView + androidx.webkit). Tablar, maxfiy tab, xatcho'plar, tungi rejim,
-reklama bloklash, sahifada qidirish, foydalanuvchi skriptlari, Google qidiruvi.
+Android Studio yoki GitHub Actions bilan `gradle assembleDebug` orqali APK yarating.
 
-## APK olish (Android Studio'siz)
-1. Fayllarni GitHub repoga yuklang (`.github` papkasi bilan).
-2. Actions bo'limida "APK yig'ish" ishga tushadi.
-3. Tugagach `Surfer-APK` artefaktini yuklab oling, ichida `app-debug.apk` bor.
+GitHub: ZIP ichidagi **Surfer** papkasining ichidagi fayllarni repository ildiziga yuklang. Actions -> APK yig'ish -> Run workflow.
+
+Bosh sahifa Google uslubidan ilhomlangan, Surfer brendi bilan. Menyu -> Mahalliy akkauntlar orqali profil nomlarini qo'shing, almashtiring yoki o'chiring. Ma'lumotlar Android SharedPreferences ichida, faqat shu ilovada saqlanadi. Bu Google akkauntiga kirish yoki mustaqil cookie/tarix izolatsiyasi emas; profillar faqat lokal nomlar.
+
+## Profil (SurfeTheNet bilan umumiy)
+Menyu -> "Akkaunt va profil": SurfeTheNet o'rnatilgan bo'lsa, profil (ism, emoji, rang) o'sha ilovadan o'qiladi va bosh sahifadagi avatarda ko'rinadi. Avatarni bossangiz ham shu menyu ochiladi. O'rnatilmagan bo'lsa, mahalliy profillar ishlaydi.

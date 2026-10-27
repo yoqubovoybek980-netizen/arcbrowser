@@ -5,15 +5,18 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.app.DownloadManager
 import android.content.Context
+import android.content.res.ColorStateList
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -31,6 +34,7 @@ import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -44,11 +48,7 @@ import java.io.ByteArrayInputStream
 import java.net.URLEncoder
 
 private const val HOME_BASE = "https://surfer.home/"
-private const val HOME_HTML = """<html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-<style>body{background:#0a1020;color:#e6edf3;font-family:sans-serif;text-align:center;padding-top:28vh}
-h1{font-weight:300;letter-spacing:3px}input{width:80%;padding:14px;border-radius:24px;border:0;font-size:16px}</style></head>
-<body><h1>Surfer</h1><form action="https://www.google.com/search"><input name="q" placeholder="Google'da qidirish..."></form></body></html>"""
-
+private const val HOME_CSS = """*{box-sizing:border-box}body{margin:0;background:#202124;color:#f1f3f4;font-family:Arial,sans-serif}.top{display:flex;justify-content:space-between;align-items:center;padding:23px 24px}.menu{font-size:25px;color:#ddd}.avatar{width:43px;height:43px;border-radius:50%;background:linear-gradient(140deg,#00d4ff,#1459ed);display:grid;place-items:center;font-weight:bold;font-size:20px;color:white;border:2px solid #46546a}.w{padding:35px 20px 70px;max-width:720px;margin:auto;text-align:center}.brand{display:flex;align-items:center;justify-content:center;gap:12px;margin:15px 0 44px}.brand img{width:76px;height:76px;border-radius:20px}.brand span{font-size:46px;font-weight:600;letter-spacing:-2px}.search{display:flex;align-items:center;border:1px solid #51545a;border-radius:38px;background:#303134;padding:9px 16px;gap:12px}.search input{min-width:0;flex:1;border:0;outline:0;background:transparent;color:#fff;font-size:17px;padding:13px 0}.search button{background:none;border:0;color:#b6d1ff;font-size:24px}.chips{display:flex;gap:10px;overflow:auto;margin:25px 0 30px}.chip{white-space:nowrap;border-radius:40px;background:#303136;padding:15px 20px;font-size:15px;color:#e7e7e7}.g{display:grid;grid-template-columns:repeat(4,1fr);gap:18px 8px;margin:30px auto;max-width:520px}.t{text-decoration:none;color:#e4e8f0;font-size:12px}.c{display:flex;width:55px;height:55px;border-radius:18px;margin:0 auto 9px;align-items:center;justify-content:center;color:#fff;font-size:23px;font-weight:600}.section{text-align:left;margin:35px 0 14px;font-size:17px}.news{background:#2b2d32;border:1px solid #3b3d42;border-radius:20px;padding:22px;text-align:left}.news h3{margin:0 0 8px;font-size:19px}.news p{color:#adb4bf;line-height:1.5}.b{display:block;text-decoration:none;color:#e6edf3;background:#303136;border-radius:14px;padding:14px;margin:8px 0;text-align:left;font-size:14px;overflow:hidden;text-overflow:ellipsis}"""
 private val BLOCKED_HOSTS = listOf(
     "doubleclick.net", "googlesyndication.com", "googleadservices.com", "adservice.google.com",
     "adnxs.com", "taboola.com", "outbrain.com", "scorecardresearch.com", "criteo.com", "criteo.net",
@@ -108,6 +108,118 @@ class MainActivity : Activity() {
         setOnClickListener { onClick() }
     }
 
+    private fun ibtn(res: Int, onClick: () -> Unit) = ImageButton(this).apply {
+        setImageResource(res)
+        setColorFilter(Color.WHITE)
+        val tv = TypedValue()
+        this@MainActivity.theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, tv, true)
+        setBackgroundResource(tv.resourceId)
+        setPadding(dp(14), dp(12), dp(14), dp(12))
+        setOnClickListener { onClick() }
+    }
+
+    private fun pill(color: Int, r: Int = 24) = GradientDrawable().apply {
+        setColor(color)
+        cornerRadius = dp(r).toFloat()
+    }
+
+    private fun esc(t: String) = t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+
+    private fun homeHtml(): String {
+        val tiles = listOf(
+            Triple("Google", "https://www.google.com", "#4285F4"),
+            Triple("YouTube", "https://m.youtube.com", "#E53935"),
+            Triple("Gmail", "https://mail.google.com", "#EA4335"),
+            Triple("Maps", "https://maps.google.com", "#34A853"),
+            Triple("Translate", "https://translate.google.com", "#1A73E8"),
+            Triple("Drive", "https://drive.google.com", "#F9A825"),
+            Triple("Wikipedia", "https://uz.wikipedia.org", "#6B7280"),
+            Triple("Telegram", "https://web.telegram.org", "#229ED9")
+        )
+        val sp = ProfileClient.read(this)
+        val name = sp?.name?.takeIf { it.isNotBlank() } ?: (prefs.getString("local_account", "Mehmon") ?: "Mehmon")
+        val initial = esc(sp?.emoji?.takeIf { it.isNotEmpty() } ?: name.take(1).uppercase())
+        val avatarStyle = (sp?.let { "background:" + String.format("#%06X", 0xFFFFFF and it.color) + ";color:#202124;" } ?: "") +
+            "text-decoration:none"
+        val sb = StringBuilder()
+        sb.append("<!doctype html><html lang='uz'><head><meta name='viewport' content='width=device-width,initial-scale=1'><style>")
+        sb.append(HOME_CSS)
+        sb.append("</style></head><body><div class='top'><span class='menu'>☰</span><a class='avatar' href='surfer://profile' style='").append(avatarStyle).append("'>").append(initial).append("</a></div>")
+        sb.append("<main class='w'><div class='brand'><img src='/logo.png'><span>Surfer</span></div>")
+        sb.append("<form class='search' action='https://www.google.com/search'><button type='submit'>⌕</button><input name='q' placeholder='Surfer orqali qidiring' autocomplete='off'><button type='submit'>➜</button></form>")
+        sb.append("<div class='chips'><div class='chip'>✦ Surfer qidiruv</div><div class='chip'>🌐 Internet</div><div class='chip'>★ Sevimlilar</div></div>")
+        sb.append("<div class='g'>")
+        for ((title, url, color) in tiles) {
+            sb.append("<a class='t' href='").append(url).append("'><span class='c' style='background:")
+                .append(color).append("'>").append(title.take(1)).append("</span>")
+                .append(title).append("</a>")
+        }
+        sb.append("</div><div class='section'>Surfer yangiliklari</div><div class='news'><h3>Surfer bilan internetni kashf eting</h3><p>Qidiruv, sevimli saytlar va mahalliy profil — hammasi bir joyda. Profil: ")
+            .append(esc(name)).append(".</p></div>")
+        val bm = (prefs.getStringSet("bm", emptySet()) ?: emptySet()).toList().sorted().take(8)
+        if (bm.isNotEmpty()) {
+            sb.append("<div class='section'>Xatcho'plar</div>")
+            for (item in bm) {
+                sb.append("<a class='b' href='").append(esc(item.substringBefore('\t'))).append("'>")
+                    .append(esc(item.substringAfter('\t'))).append("</a>")
+            }
+        }
+        sb.append("</main></body></html>")
+        return sb.toString()
+    }
+
+    private fun showAccountMenu() {
+        val p = ProfileClient.read(this)
+        if (p == null) { showLocalAccounts(); return }
+        AlertDialog.Builder(this)
+            .setTitle(if (p.name.isNotBlank()) p.name else "Profil")
+            .setItems(arrayOf("Profilni tahrirlash (SurfeTheNet)", "Mahalliy akkauntlar")) { _, i ->
+                if (i == 0) openProfileEditor() else showLocalAccounts()
+            }.setNegativeButton("Yopish", null).show()
+    }
+
+    private fun openProfileEditor() {
+        val i = Intent().setClassName("uz.artic.surfethenet", "uz.artic.surfethenet.MainActivity")
+            .putExtra("profile", true)
+        try { startActivity(i) } catch (_: Exception) { toast("SurfeTheNet o'rnatilmagan") }
+    }
+
+    private fun showLocalAccounts() {
+        val names = prefs.getString("local_accounts", "")!!.split("|").filter { it.isNotBlank() }
+        val options = (names.map { "👤 $it" } + "＋ Yangi mahalliy profil").toTypedArray()
+        AlertDialog.Builder(this).setTitle("Surfer akkauntlari (faqat telefonda)")
+            .setItems(options) { _, index ->
+                if (index == names.size) {
+                    val field = EditText(this).apply {
+                        hint = "Profil nomi"
+                        setSingleLine(true)
+                        filters = arrayOf(android.text.InputFilter.LengthFilter(32))
+                    }
+                    AlertDialog.Builder(this).setTitle("Yangi profil")
+                        .setView(field)
+                        .setNegativeButton("Bekor qilish", null)
+                        .setPositiveButton("Saqlash") { _, _ ->
+                            val value = field.text.toString().trim().replace("|", "")
+                            if (value.isNotEmpty()) {
+                                val updated = (names + value).distinct()
+                                prefs.edit().putString("local_accounts", updated.joinToString("|"))
+                                    .putString("local_account", value).apply()
+                                loadHome(cw().web)
+                            }
+                        }.show()
+                } else {
+                    prefs.edit().putString("local_account", names[index]).apply()
+                    loadHome(cw().web)
+                }
+            }.setNeutralButton("Joriy profilni o'chirish") { _, _ ->
+                val current = prefs.getString("local_account", "Mehmon")
+                val remaining = names.filter { it != current }
+                prefs.edit().putString("local_accounts", remaining.joinToString("|"))
+                    .putString("local_account", remaining.firstOrNull() ?: "Mehmon").apply()
+                loadHome(cw().web)
+            }.setNegativeButton("Yopish", null).show()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         adblock = prefs.getBoolean("adblock", true)
@@ -126,7 +238,7 @@ class MainActivity : Activity() {
         val top = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(6), dp(8), dp(6))
+            setPadding(dp(10), dp(8), dp(4), dp(8))
         }
         address = EditText(this).apply {
             setSingleLine()
@@ -134,17 +246,32 @@ class MainActivity : Activity() {
             textSize = 15f
             setTextColor(Color.WHITE)
             setHintTextColor(Color.GRAY)
-            setBackgroundColor(Color.parseColor("#1e262e"))
-            setPadding(dp(14), dp(10), dp(14), dp(10))
+            background = pill(Color.parseColor("#16203a"))
+            setPadding(dp(18), dp(11), dp(18), dp(11))
             imeOptions = EditorInfo.IME_ACTION_GO
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             setSelectAllOnFocus(true)
             setOnEditorActionListener { _, _, _ -> go(text.toString()); true }
         }
-        tabBtn = btn("1") { showTabs() }
+        tabBtn = Button(this).apply {
+            text = "1"
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            background = GradientDrawable().apply {
+                setColor(Color.TRANSPARENT)
+                setStroke(dp(2), Color.WHITE)
+                cornerRadius = dp(8).toFloat()
+            }
+            minWidth = 0
+            minimumWidth = 0
+            minHeight = 0
+            minimumHeight = 0
+            setPadding(dp(4), 0, dp(4), 0)
+            setOnClickListener { showTabs() }
+        }
         top.addView(address, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        top.addView(tabBtn)
-        top.addView(btn("\u22EE") { showMenu() })
+        top.addView(tabBtn, LinearLayout.LayoutParams(dp(32), dp(32)).apply { setMargins(dp(10), 0, dp(2), 0) })
+        top.addView(ibtn(R.drawable.ic_more) { showMenu() })
 
         // Sahifada qidirish paneli
         findCount = TextView(this).apply {
@@ -158,8 +285,8 @@ class MainActivity : Activity() {
             textSize = 14f
             setTextColor(Color.WHITE)
             setHintTextColor(Color.GRAY)
-            setBackgroundColor(Color.parseColor("#1e262e"))
-            setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = pill(Color.parseColor("#16203a"), 18)
+            setPadding(dp(14), dp(8), dp(14), dp(8))
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
                 override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
@@ -189,19 +316,23 @@ class MainActivity : Activity() {
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
             visibility = View.GONE
+            progressTintList = ColorStateList.valueOf(Color.parseColor("#4DA3FF"))
         }
 
         content = FrameLayout(this)
 
         // Pastki panel
-        val bottom = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        fun add(label: String, f: () -> Unit) =
-            bottom.addView(btn(label, f), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        add("\u25C0") { if (cw().web.canGoBack()) cw().web.goBack() }
-        add("\u25B6") { if (cw().web.canGoForward()) cw().web.goForward() }
-        add("\u2302") { loadHome(cw().web) }
-        add("\u21BB") { cw().web.reload() }
-        add("+") { newTab() }
+        val bottom = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(Color.parseColor("#0f1830"))
+        }
+        fun add(res: Int, f: () -> Unit) =
+            bottom.addView(ibtn(res, f), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        add(R.drawable.ic_back) { if (cw().web.canGoBack()) cw().web.goBack() }
+        add(R.drawable.ic_forward) { if (cw().web.canGoForward()) cw().web.goForward() }
+        add(R.drawable.ic_home) { loadHome(cw().web) }
+        add(R.drawable.ic_refresh) { cw().web.reload() }
+        add(R.drawable.ic_add) { newTab() }
 
         root.addView(top)
         root.addView(findBar)
@@ -213,7 +344,7 @@ class MainActivity : Activity() {
         newTab(intent?.data?.toString())
     }
 
-    private fun loadHome(w: WebView) = w.loadDataWithBaseURL(HOME_BASE, HOME_HTML, "text/html", "utf-8", null)
+    private fun loadHome(w: WebView) = w.loadDataWithBaseURL(HOME_BASE, homeHtml(), "text/html", "utf-8", null)
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun newTab(url: String? = null, incognito: Boolean = false) {
@@ -261,6 +392,10 @@ class MainActivity : Activity() {
 
             override fun shouldOverrideUrlLoading(v: WebView?, r: WebResourceRequest?): Boolean {
                 val u = r?.url ?: return false
+                if (u.scheme == "surfer") {
+                    if (u.host == "profile") showAccountMenu()
+                    return true
+                }
                 when (u.scheme) {
                     "http", "https", "about", "data", "blob", "file" -> return false
                 }
@@ -269,7 +404,15 @@ class MainActivity : Activity() {
             }
 
             override fun shouldInterceptRequest(v: WebView?, r: WebResourceRequest?): WebResourceResponse? {
-                if (!adblock || r == null || r.isForMainFrame) return null
+                if (r == null) return null
+                if (r.url.host == "surfer.home" && r.url.path == "/logo.png") {
+                    return try {
+                        WebResourceResponse("image/png", null, assets.open("logo.png"))
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+                if (!adblock || r.isForMainFrame) return null
                 val h = r.url.host ?: return null
                 val p = r.url.path ?: ""
                 if (BLOCKED_HOSTS.any { h == it || h.endsWith(".$it") } ||
@@ -308,7 +451,8 @@ class MainActivity : Activity() {
         tabs.forEachIndexed { k, t -> t.web.visibility = if (k == i) View.VISIBLE else View.GONE }
         tabBtn.text = tabs.size.toString()
         progress.visibility = View.GONE
-        address.setBackgroundColor(Color.parseColor(if (tabs[i].incognito) "#3a1e4a" else "#1e262e"))
+        address.background = pill(Color.parseColor(if (tabs[i].incognito) "#3a1e4a" else "#16203a"))
+        address.setPadding(dp(18), dp(11), dp(18), dp(11))
         findCount.text = ""
         showUrl(cw().web.url ?: "")
     }
@@ -487,6 +631,7 @@ class MainActivity : Activity() {
     private fun showMenu() {
         val items = arrayOf(
             "Yangi tab",
+            "Akkaunt va profil",
             "Maxfiy tab",
             "Sahifada qidirish",
             "Xatcho'pga qo'shish",
@@ -501,24 +646,25 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this).setItems(items) { _, i ->
             when (i) {
                 0 -> { newTab() }
-                1 -> { newTab(null, true) }
-                2 -> { showFind() }
-                3 -> { addBookmark() }
-                4 -> { showBookmarks() }
-                5 -> {
+                1 -> { showAccountMenu() }
+                2 -> { newTab(null, true) }
+                3 -> { showFind() }
+                4 -> { addBookmark() }
+                5 -> { showBookmarks() }
+                6 -> {
                     dark = !dark
                     prefs.edit().putBoolean("dark", dark).apply()
                     cw().web.reload()
                 }
-                6 -> { toggleDesktop() }
-                7 -> {
+                7 -> { toggleDesktop() }
+                8 -> {
                     adblock = !adblock
                     prefs.edit().putBoolean("adblock", adblock).apply()
                     cw().web.reload()
                 }
-                8 -> { showScripts() }
-                9 -> { closeTab() }
-                10 -> { clearData() }
+                9 -> { showScripts() }
+                10 -> { closeTab() }
+                11 -> { clearData() }
             }
         }.show()
     }
@@ -588,6 +734,19 @@ class MainActivity : Activity() {
             tabs.size > 1 -> closeTab()
             else -> super.onBackPressed()
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Profil o'zgargan bo'lishi mumkin: bosh sahifada turgan bo'lsak yangilaymiz
+        try {
+            if (tabs.isNotEmpty() && cw().web.url?.startsWith(HOME_BASE) == true) loadHome(cw().web)
+        } catch (_: Exception) { }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        intent?.data?.let { newTab(it.toString()) }   // SurfeTheNet'dan kelgan havola yangi tabda
     }
 
     override fun onPause() {
