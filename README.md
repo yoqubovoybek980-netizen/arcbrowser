@@ -6,5 +6,8 @@ GitHub: ZIP ichidagi **Surfer** papkasining ichidagi fayllarni repository ildizi
 
 Bosh sahifa Google uslubidan ilhomlangan, Surfer brendi bilan. Menyu -> Mahalliy akkauntlar orqali profil nomlarini qo'shing, almashtiring yoki o'chiring. Ma'lumotlar Android SharedPreferences ichida, faqat shu ilovada saqlanadi. Bu Google akkauntiga kirish yoki mustaqil cookie/tarix izolatsiyasi emas; profillar faqat lokal nomlar.
 
-## Profil (SurfeTheNet bilan umumiy)
-Menyu -> "Akkaunt va profil": SurfeTheNet o'rnatilgan bo'lsa, profil (ism, emoji, rang) o'sha ilovadan o'qiladi va bosh sahifadagi avatarda ko'rinadi. Avatarni bossangiz ham shu menyu ochiladi. O'rnatilmagan bo'lsa, mahalliy profillar ishlaydi.
+## Google bilan kirish va profil
+Menyu -> "Akkaunt va profil" (yoki bosh sahifadagi avatar):
+- **Google bilan kirish (saytga)**: accounts.google.com ochiladi, kirsangiz Gmail, YouTube va boshqalarda akkauntingiz ishlaydi (cookie'lar saqlanadi).
+- **Telefondagi Google akkauntni tanlash**: tizim oynasidan tanlanadi, email profilda ko'rsatiladi.
+- **Profilni sozlash**: ism, emoji, rang. Hammasi faqat telefonda.

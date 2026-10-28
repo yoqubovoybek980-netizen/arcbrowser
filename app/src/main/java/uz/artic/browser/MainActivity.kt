@@ -1,5 +1,6 @@
 package uz.artic.browser
 
+import android.accounts.AccountManager
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.AlertDialog
@@ -136,10 +137,13 @@ class MainActivity : Activity() {
             Triple("Wikipedia", "https://uz.wikipedia.org", "#6B7280"),
             Triple("Telegram", "https://web.telegram.org", "#229ED9")
         )
-        val sp = ProfileClient.read(this)
-        val name = sp?.name?.takeIf { it.isNotBlank() } ?: (prefs.getString("local_account", "Mehmon") ?: "Mehmon")
-        val initial = esc(sp?.emoji?.takeIf { it.isNotEmpty() } ?: name.take(1).uppercase())
-        val avatarStyle = (sp?.let { "background:" + String.format("#%06X", 0xFFFFFF and it.color) + ";color:#202124;" } ?: "") +
+        val gEmail = prefs.getString("g_email", "") ?: ""
+        val name = (prefs.getString("p_name", "") ?: "").ifBlank { gEmail.substringBefore("@") }
+            .ifBlank { prefs.getString("local_account", "Mehmon") ?: "Mehmon" }
+        val emoji = prefs.getString("p_emoji", "") ?: ""
+        val color = prefs.getString("p_color", "") ?: ""
+        val initial = esc(emoji.ifEmpty { name.take(1).uppercase() })
+        val avatarStyle = (if (color.matches(Regex("^#[0-9a-fA-F]{6}$"))) "background:$color;color:#202124;" else "") +
             "text-decoration:none"
         val sb = StringBuilder()
         sb.append("<!doctype html><html lang='uz'><head><meta name='viewport' content='width=device-width,initial-scale=1'><style>")
@@ -168,20 +172,82 @@ class MainActivity : Activity() {
         return sb.toString()
     }
 
+    private val EMOJIS = arrayOf("Harf (Aa)", "😎", "🦊", "🐯", "🚀", "⚡", "🎮", "🌙", "🔥", "🐼")
+    private val COLORS = arrayOf(
+        "Ko'k" to "#8ab4f8", "Qizil" to "#f28b82", "Yashil" to "#81c995", "Sariq" to "#fdd663",
+        "Binafsha" to "#c58af9", "Pushti" to "#ff8bcb", "Moviy" to "#78d9ec", "To'q sariq" to "#fcad70"
+    )
+    private val REQ_ACCOUNT = 43
+
+    private fun refreshHomeIfShown() {
+        try {
+            if (tabs.isNotEmpty() && cw().web.url?.startsWith(HOME_BASE) == true) loadHome(cw().web)
+        } catch (_: Exception) { }
+    }
+
     private fun showAccountMenu() {
-        val p = ProfileClient.read(this)
-        if (p == null) { showLocalAccounts(); return }
+        val email = prefs.getString("g_email", "") ?: ""
+        val items = arrayOf(
+            "Google bilan kirish (saytga)",
+            "Telefondagi Google akkauntni tanlash",
+            "Profilni sozlash (ism, emoji, rang)",
+            "Mahalliy akkauntlar",
+            "Google'dan chiqish"
+        )
         AlertDialog.Builder(this)
-            .setTitle(if (p.name.isNotBlank()) p.name else "Profil")
-            .setItems(arrayOf("Profilni tahrirlash (SurfeTheNet)", "Mahalliy akkauntlar")) { _, i ->
-                if (i == 0) openProfileEditor() else showLocalAccounts()
+            .setTitle(if (email.isNotEmpty()) email else "Akkaunt")
+            .setItems(items) { _, i ->
+                when (i) {
+                    0 -> newTab("https://accounts.google.com/")
+                    1 -> pickGoogleAccount()
+                    2 -> editProfile()
+                    3 -> showLocalAccounts()
+                    4 -> {
+                        prefs.edit().remove("g_email").apply()
+                        newTab("https://accounts.google.com/Logout")
+                    }
+                }
             }.setNegativeButton("Yopish", null).show()
     }
 
-    private fun openProfileEditor() {
-        val i = Intent().setClassName("uz.artic.surfethenet", "uz.artic.surfethenet.MainActivity")
-            .putExtra("profile", true)
-        try { startActivity(i) } catch (_: Exception) { toast("SurfeTheNet o'rnatilmagan") }
+    // Telefondagi Google akkauntlar ro'yxatidan tanlash (tizim oynasi, ruxsat kerak emas)
+    private fun pickGoogleAccount() {
+        @Suppress("DEPRECATION")
+        val i = AccountManager.newChooseAccountIntent(null, null, arrayOf("com.google"), null, null, null, null)
+        try { startActivityForResult(i, REQ_ACCOUNT) } catch (_: Exception) { toast("Akkaunt oynasini ochib bo'lmadi") }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_ACCOUNT && resultCode == RESULT_OK) {
+            val email = data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME) ?: return
+            prefs.edit().putString("g_email", email).apply()
+            refreshHomeIfShown()
+            toast("Akkaunt: $email")
+        }
+    }
+
+    private fun editProfile() {
+        val field = EditText(this).apply {
+            hint = "Ism"
+            setSingleLine(true)
+            setText(prefs.getString("p_name", ""))
+            filters = arrayOf(android.text.InputFilter.LengthFilter(32))
+        }
+        AlertDialog.Builder(this).setTitle("Profil").setView(field)
+            .setNegativeButton("Bekor qilish", null)
+            .setPositiveButton("Keyingi") { _, _ ->
+                prefs.edit().putString("p_name", field.text.toString().trim()).apply()
+                AlertDialog.Builder(this).setTitle("Avatar").setItems(EMOJIS) { _, i ->
+                    prefs.edit().putString("p_emoji", if (i == 0) "" else EMOJIS[i]).apply()
+                    AlertDialog.Builder(this).setTitle("Rang")
+                        .setItems(COLORS.map { it.first }.toTypedArray()) { _, c ->
+                            prefs.edit().putString("p_color", COLORS[c].second).apply()
+                            refreshHomeIfShown()
+                        }.show()
+                }.show()
+            }.show()
     }
 
     private fun showLocalAccounts() {
@@ -367,6 +433,7 @@ class MainActivity : Activity() {
         w.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
+            userAgentString = mobileUa()
             mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             setSupportZoom(true)
             builtInZoomControls = true
@@ -374,6 +441,7 @@ class MainActivity : Activity() {
             loadWithOverviewMode = true
             useWideViewPort = true
         }
+        if (!incognito) CookieManager.getInstance().setAcceptThirdPartyCookies(w, true)
         w.webViewClient = object : WebViewClient() {
             override fun onPageStarted(v: WebView?, u: String?, f: Bitmap?) {
                 if (v === cw().web) showUrl(u ?: "")
@@ -669,10 +737,14 @@ class MainActivity : Activity() {
         }.show()
     }
 
+    // Google kirishi oddiy WebView'ni ("; wv") rad etadi, shuning uchun brauzerga o'xshash UA
+    private fun mobileUa(): String =
+        WebSettings.getDefaultUserAgent(this).replace("; wv", "").replace(" Version/4.0", "")
+
     private fun toggleDesktop() {
         desktop = !desktop
         val s = cw().web.settings
-        s.userAgentString = if (desktop) DESKTOP_UA else null
+        s.userAgentString = if (desktop) DESKTOP_UA else mobileUa()
         s.useWideViewPort = true
         cw().web.reload()
     }
@@ -736,17 +808,9 @@ class MainActivity : Activity() {
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        // Profil o'zgargan bo'lishi mumkin: bosh sahifada turgan bo'lsak yangilaymiz
-        try {
-            if (tabs.isNotEmpty() && cw().web.url?.startsWith(HOME_BASE) == true) loadHome(cw().web)
-        } catch (_: Exception) { }
-    }
-
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
-        intent?.data?.let { newTab(it.toString()) }   // SurfeTheNet'dan kelgan havola yangi tabda
+        intent?.data?.let { newTab(it.toString()) }   // boshqa ilovadan kelgan havola yangi tabda
     }
 
     override fun onPause() {
